@@ -12,7 +12,13 @@ import (
 // Write is used to prepare text to be printed on the display.
 // It turns a string in an image, then calls the returned value as a parameter of Convert(), and later, call Display().
 func (e *EPaper) Write(text string, fontSize float64, fontFile string) (image.Image) {
+	return e.WriteRotate(text, fontSize, fontFile, false)
+}
 
+// WriteRotate is used to prepare text to be printed on the display.
+// It turns a string in an image, then calls the returned value as a parameter of Convert(), and later, call Display().
+// If rotate is TRUE, the text will be rotate 90 degree clockwise.
+func (e *EPaper) WriteRotate(text string, fontSize float64, fontFile string, rotate bool) (image.Image) {
 	// Read the font file.
 	fontBytes, err := ioutil.ReadFile(fontFile)
 	if err != nil {
@@ -26,7 +32,11 @@ func (e *EPaper) Write(text string, fontSize float64, fontFile string) (image.Im
 	}
 
 	// Convert the text to image.
-	pic := text2pic.NewTextPicture(text2pic.Configure{Width: e.model.Width, BgColor: text2pic.ColorWhite})
+	width := e.model.Width
+	if rotate {
+		width = e.model.Height
+	}
+	pic := text2pic.NewTextPicture(text2pic.Configure{Width: width, BgColor: text2pic.ColorWhite})
 	pic.AddTextLine(text, fontSize, f, text2pic.ColorBlack, text2pic.Padding{Left: 0, Top: 0, Bottom: 0})
 
 	var buffer bytes.Buffer
