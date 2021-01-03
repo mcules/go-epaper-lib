@@ -38,8 +38,12 @@ If the image is larger than the display, the image is cropped.
 
 These are some idea I'd like to implement:
 
-- [ ] Write text with custom font and attributes (bold, italic, font size)
+- [x] Prints image (cropping if necessary)
+- [x] Prints text (custom font, custom font size)
+
+- [ ] Write text with custom font and attributes (bold, italic)
 - [ ] Position text and image on display
+- [ ] Rotate image / text
 - [ ] Compose screen (overlays)
 - [ ] Print negative (if black, print as white and vice-versa)
 - [ ] Program functionalities for buttons (key1 to key4 on e-Paper HAT)
