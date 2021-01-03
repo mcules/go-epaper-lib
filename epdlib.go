@@ -20,30 +20,30 @@ import (
 type Model struct {
 	Width int
 	Height int
-	// TODO Color?
+	StartTransmission byte
+	// TODO Color? The working model (2.7in bw) does not work with color...
 }
 
 // EPaper represents the e-papaer device.
 type EPaper struct {
 	connection conn.Conn
-	DataCommandSelection gpio.PinOut	// High: Data, Low: Command
-	ChipSelection gpio.PinOut			// Low: active
-	rst gpio.PinOut						// Low: active
-	busy gpio.PinIO						// Low: active
-	model Model
+	DataCommandSelection gpio.PinOut 	// High: Data, Low: Command
+	ChipSelection gpio.PinOut 			// Low: active
+	rst gpio.PinOut 					// Low: active
+	busy gpio.PinIO 					// Low: active
+	model Model 						// Details of the model of the display you are using
+	lineWidth int 						// Number of pixels divided by 8 (lines are grouped as a bit in a byte)
 }
 
+var (
+	// Model2in7bw represents the black-and-white EPD 2.7 inches display
+	Model2in7bw = Model{Width: 176, Height: 264, StartTransmission: 0x13}
+
+	// Model7in5 represents the EPD 7.5 inches display
+	Model7in5 = Model{Width: 384, Height: 640}
+)
+
 const (
-	// Model7in5Width is the width size of the device display.
-	Model7in5Width int = 640
-	// Model7in5Height is the height of the device display.
-	Model7in5Height int = 384
-
-	// Model2in7Width is the width size of the device display.
-	Model2in7Width int = 176
-	// Model2in7Height is the height of the device display.
-	Model2in7Height int = 264
-
 	// ResetPin is the default pin where RST pin is connected.
 	ResetPin string = "17"
 
@@ -55,17 +55,7 @@ const (
 
 	// BusyPin is the default pin where BUSY pin is connected.
 	BusyPin string = "24"
-)
 
-var (
-	// Model2in7bw represents the black-and-white EPD 2.7 inches display
-	Model2in7bw = Model{Width: Model2in7Width, Height: Model2in7Height}
-
-	// Model7in5 represents the EPD 7.5 inches display
-	Model7in5 = Model{Width: Model7in5Width, Height: Model7in5Height}
-)
-
-const (
 	// Source: https://www.waveshare.com/w/upload/2/2d/2.7inch-e-paper-Specification.pdf
 
 	// CmdBoosterSoftStart is used during initialization.
@@ -149,7 +139,7 @@ const (
 )
 
 /**
-PANEL_SETTING                  byte = 0x00
+	PANEL_SETTING                  byte = 0x00
 	POWER_SETTING                  byte = 0x01
 	POWER_OFF                      byte = 0x02
 	POWER_OFF_SEQUENCE_SETTING     byte = 0x03
@@ -193,7 +183,7 @@ func New(model Model) (*EPaper, error) {
 	return NewCustom(DataCommandPin, ChipSelectionPin, ResetPin, BusyPin, model)
 }
 
-// NewCustom creates a new instance of EPaper with custom parameters.
+// NewCustom creates a new instance of EPaper with custom parameters. If you have the HAT module, you can use the New() function.
 func NewCustom(dcPin, csPin, rstPin, busyPin string, model Model) (*EPaper, error) {
 	if _, err := host.Init(); err != nil {
 		return nil, err
@@ -246,15 +236,10 @@ func NewCustom(dcPin, csPin, rstPin, busyPin string, model Model) (*EPaper, erro
 		return nil, err
 	}
 
-	// var width, height int
-
-	// if model % 8 == 0 {
-	// 	width = (EPaperWidth / 8)
-	// } else {
-	// 	width = (EPaperWidth / 8 + 1)
-	// }
-
-	// height = EPaperHeight
+	lineWidth := model.Width / 8
+	if model.Width % 8 != 0 {
+		lineWidth++
+	}
 
 	e := &EPaper{
 		connection: connection,
@@ -262,9 +247,8 @@ func NewCustom(dcPin, csPin, rstPin, busyPin string, model Model) (*EPaper, erro
 		ChipSelection: cs,
 		rst: rst,
 		busy: busy,
-		// width: width,
-		// height: height,
 		model: model,
+		lineWidth: lineWidth,
 	}
 
 	return e, nil
@@ -311,10 +295,7 @@ func (e *EPaper) turnOnDisplay() {
 func (e *EPaper) Init() {
 	e.Reset()
 
-	// ORIGINAL: e.send(CmdPowerSetting, []byte{0x37, 0x00})
 	e.send(CmdPowerSetting, []byte{0x03, 0x00, 0x2b, 0x2b, 0x09})
-	// e.send(CmdPanelSetting, []byte{0xcf, 0x08})
-	// ORIGINAL: e.send(CmdBoosterSoftStart, []byte{0xc7, 0xcc, 0x28})
 	e.send(CmdBoosterSoftStart, []byte{0x07, 0x07, 0x17})
 
 	// Power optimizations (new)
@@ -334,26 +315,15 @@ func (e *EPaper) Init() {
 
 	e.send(CmdPanelSetting, []byte{0xaf})
 
-	// ORIGINAL: e.send(CmdPllControl, []byte{0x3c})
-	e.send(CmdPllControl, []byte{0x3a})	// 3A 100Hz, 29 150Hz, 39 200Hz, 31 171Hz
+	e.send(CmdPllControl, []byte{0x3a})     // 3A 100Hz, 29 150Hz, 39 200Hz, 31 171Hz
 
-	// e.send(CmdTemperatureCalibration, []byte{0x00})
-	// e.send(CmdVcomDataIntervalSet, []byte{0x77})
-	// e.send(CmdTconSetting, []byte{0x22})
-	// e.send(CmdTconResolution, []byte{
-	// 	byte(e.model.Width >> 8), byte(e.model.Width & 0xff),
-	// 	byte(e.model.Height >> 8), byte(e.model.Height & 0xff)})
-	// ORIGINAL: e.send(CmdVcmDcSetting, []byte{0x1e})
 	e.send(CmdVcmDcSetting, []byte{0x12})
-
-	// e.send(0xe5, []byte{0x03})
 
 	e.send(CmdLutForVcom, Model2in7LutVcomDc)
 	e.send(CmdLutBlue, Model2in7LutWw)
 	e.send(CmdLutWhite, Model2in7LutBw)
 	e.send(CmdLutGray1, Model2in7LutWb)
 	e.send(CmdLutGray2, Model2in7LutBb)
-
 }
 
 func (e *EPaper) send(cmd byte, data []byte) {
@@ -369,46 +339,29 @@ func (e *EPaper) send(cmd byte, data []byte) {
 func (e *EPaper) ClearScreen() {
 	data := make([]byte, e.model.Height * e.model.Width * 4)
 	for i := range data {
-		data[i] = 0x33
+		data[i] = 0xFF
 	}
 
 	e.send(CmdDataStartTransimission1, data)
+	e.send(0x13, data)
 	e.turnOnDisplay()
 }
 
 // Display takes a byte buffer and updates the screen.
 func (e *EPaper) Display(img []byte) {
-	// TODO You must understand!
-	e.sendCommand(CmdDataStartTransimission1)
+	// This command is required before sending data to print on screen. Each model uses its own code.
+	e.sendCommand(e.model.StartTransmission)
 
-	for j := 0; j < e.model.Height; j++ {
-		for i := 0; i < e.model.Width; i++ {
-			dataBlack := ^img[i+j*e.model.Height]
-
-			for k := 0; k < 8; k++ {
-				var data byte
-
-				if dataBlack&0x80 > 0 {
-					data = 0x00
-				} else {
-					data = 0x03
-				}
-
-				data <<= 4
-				dataBlack <<= 1
-				k++
-
-				if dataBlack&0x80 > 0 {
-					data |= 0x00
-				} else {
-					data |= 0x03
-				}
-
-				dataBlack <<= 1
-
-				e.sendData(data)
-			}
-		}
+	// Processing each line
+	// Processing the pixel group (each byte represents 8 chars, see README.md for details)
+	//for i, b := range img {
+	for _, b := range img {
+		e.sendData(b)
+		// TODO Debug only.
+		//fmt.Printf("%08b ", b)
+		//if i + 1 % 22 == 0 {
+		//	fmt.Println();
+		//}
 	}
 
 	e.turnOnDisplay()
@@ -417,12 +370,6 @@ func (e *EPaper) Display(img []byte) {
 // Sleep put the display in power-saving mode.
 // You can use Reset() to awaken and Init() to re-initialize the display.
 func (e *EPaper) Sleep() {
-	// TODO official python lib does it differently
-	// self.SPI.close()
-	// self.GPIO.outpu(RST_PIN, 0)
-	// self.GPIO.output(DC_PIN, 0)
-	// self.GPIO.cleanup()
-
 	e.sendCommand(CmdPowerOff)
 	e.waitUntilIdle()
 	e.send(CMdDeepSleep, []byte{0xA5})
@@ -430,28 +377,39 @@ func (e *EPaper) Sleep() {
 
 // Convert the input image into a ready-to-deisplay byte buffer.
 func (e *EPaper) Convert(img image.Image) []byte {
-	var byteToSend byte = 0x00
-	var bgColor = 1
+	var clearBackground byte = 0x00
 
-	buffer := bytes.Repeat([]byte{0x00}, e.model.Width * e.model.Height)
+	// Processing each line from the original image. If image is too large, we'll cap to the screen size.
+	height := img.Bounds().Dy()
+	if img.Bounds().Dy() > e.model.Height {
+		height = e.model.Height
+	}
+	width := img.Bounds().Dx()
+	if img.Bounds().Dx() > e.model.Width {
+		width = e.model.Width
+	}
 
-	for i := 0; i < e.model.Width; i++ {
-		for j := 0; j < e.model.Height; j++ {
-			bit := bgColor
+	// Create the output array (each element represents 8 pixels, so we need a smaller array than the original matrix.)
+	buffer := bytes.Repeat([]byte{0xFF}, e.lineWidth * e.model.Height)
+	offset := 0
+	var newValue byte = clearBackground
+	for j := 0; j < height; j++ {
+		for i:= 0; i < width; i++ {
+			// Shift previous values before calculating the current one.
+			newValue = newValue << 1
 
-			if i < img.Bounds().Dx() && j < img.Bounds().Dy() {
-				bit = color.Palette([]color.Color{color.Black, color.White}).Index(img.At(i, j))
+			// If color in pixel (x,y) is black, we mark it on the correct bit in the new element for the array.
+			if color.Palette([]color.Color{color.Black, color.White}).Index(img.At(i, j)) == 1 {
+				newValue |= 0x01
 			}
 
-			if bit == 1 {
-				byteToSend |= 0x80 >> (uint32(i) % 8)
-			}
-
-			if i % 8 == 7 {
-				buffer[(i / 8) + (j * e.model.Width)] = byteToSend
-				byteToSend = 0x00
+			// A new byte is ready to be appended to buffer array.
+			if i > 0 && (i + 1) % 8 == 0 {
+				buffer[(((i +1) / 8) - 1) + (j * width) + offset] = newValue
+				newValue = clearBackground
 			}
 		}
+		offset += e.lineWidth - width
 	}
 
 	return buffer
