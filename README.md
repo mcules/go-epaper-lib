@@ -2,7 +2,9 @@
 A golang lib to use with Waveshare(tm) e-Paper HAT for Raspberry Pi.
 
 ```
-The current version is developed/tested only for the 2.7 inches, black-and-white HAT. Hopefully, new models will be available in the future, but, at the moment, keep in mind that all info in this repo is related exclusively to the 2.7" model.
+The current version is developed/tested only for the 2.7 inches, black-and-white HAT.
+Hopefully, new models will be available in the future, but, at the moment,
+keep in mind that all info in this repo is related exclusively to the 2.7" model.
 ```
 
 # Intro for the uninitiated
@@ -42,10 +44,12 @@ func main() {
 
 	// Parse the string and process it with TTF font.
   m := epd.Write(text, fontSize, fontFile)
-  // Convert the result into an image.
-  b := epd.Convert(m)
-  // Print the resulting image.
-  epd.Display(b)
+
+  // Add the resulting image into the buffer.
+  epd.AddLayer(m, 0, 0, false)
+
+  // Print the buffer onto the display..
+  epd.Display()
 
   // Just a timeout before clearing the screen.
 	time.Sleep(10000 * time.Millisecond)
@@ -96,6 +100,8 @@ becomes :
 ```
 If the image is larger than the display, the image is cropped.
 
+IMPORTANT! The image is cropped during rotate AND translation, so the order of the commands are relevant!
+
 # How the output is composed
 
 ## Image
@@ -126,9 +132,9 @@ These are some idea I'd like to implement:
 - [x] Prints image (cropping if necessary)
 - [x] Prints text (custom font, custom font size)
 - [x] Rotate image / text
+- [x] Position text and image on display
 
 - [ ] Write text with attributes (bold, italic)
-- [ ] Position text and image on display
 - [ ] Compose screen (overlays)
 - [ ] Print negative (if black, print as white and vice-versa)
 - [ ] Program functionalities for buttons (key1 to key4 on e-Paper HAT)

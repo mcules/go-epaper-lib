@@ -1,9 +1,14 @@
 package epaper
 
 import (
+	"bytes"
 	"errors"
+	"image"
+	"image/color"
+	"image/draw"
 	"time"
 
+	"github.com/anthonynsimon/bild/paint"
 	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/gpio"
 	"periph.io/x/periph/conn/gpio/gpioreg"
@@ -30,6 +35,7 @@ type EPaper struct {
 	busy gpio.PinIO 					// Low: active
 	model Model 						// Details of the model of the display you are using
 	lineWidth int 						// Number of pixels divided by 8 (lines are grouped as a bit in a byte)
+	Display draw.Image 					// This is the image that will be printed to screen
 }
 
 var (
@@ -246,6 +252,9 @@ func NewCustom(dcPin, csPin, rstPin, busyPin string, model Model) (*EPaper, erro
 		busy: busy,
 		model: model,
 		lineWidth: lineWidth,
+		Display: paint.FloodFill(
+			image.NewRGBA(image.Rect(0, 0, model.Width, model.Height)),
+			image.Point{0, 0}, color.RGBA64{255, 255, 255, 255}, 255),
 	}
 
 	return e, nil
@@ -334,25 +343,30 @@ func (e *EPaper) send(cmd byte, data []byte) {
 
 // ClearScreen erases anything that is on screen.
 func (e *EPaper) ClearScreen() {
-	data := make([]byte, e.model.Height * e.model.Width * 4)
-	for i := range data {
-		data[i] = 0xFF
-	}
+	//draw.Draw(e.Display, e.Display.Bounds(), paint.FloodFill(e.Display, image.Point{0, 0}, color.RGBA{255, 255, 255, 255}, 255), image.Point{0, 0}, draw.Src)
+	e.Display = paint.FloodFill(
+		image.Rect(0, 0, e.Display.Bounds().Dx(), e.Display.Bounds().Dy()),
+		image.Point{0, 0}, color.RGBA{255, 255, 255, 255}, 255)
+
+	data := bytes.Repeat([]byte{0xFF}, e.model.Height * e.model.Width * 4)
 
 	e.send(CmdDataStartTransimission1, data)
 	e.send(0x13, data)
 	e.turnOnDisplay()
 }
 
-// Display takes a byte buffer and updates the screen.
-func (e *EPaper) Display(img []byte) {
+// PrintDisplay updates the screen with the contents of EPaper.Display.
+func (e *EPaper) PrintDisplay() {
+
+	imgArray := e.convert()
+
 	// This command is required before sending data to print on screen. Each model uses its own code.
 	e.sendCommand(e.model.StartTransmission)
 
 	// Processing each line
 	// Processing the pixel group (each byte represents 8 chars, see README.md for details)
 	//for i, b := range img {
-	for _, b := range img {
+	for _, b := range imgArray {
 		e.sendData(b)
 		// TODO Debug only.
 		//fmt.Printf("%08b ", b)
