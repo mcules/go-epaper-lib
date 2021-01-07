@@ -6,15 +6,18 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"io"
 	"time"
 
 	"github.com/anthonynsimon/bild/paint"
 	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/gpio"
 	"periph.io/x/periph/conn/gpio/gpioreg"
+	"periph.io/x/periph/conn/gpio/gpiotest"
 	"periph.io/x/periph/conn/physic"
 	"periph.io/x/periph/conn/spi"
 	"periph.io/x/periph/conn/spi/spireg"
+	"periph.io/x/periph/conn/spi/spitest"
 	"periph.io/x/periph/host"
 )
 
@@ -32,7 +35,7 @@ type EPaper struct {
 	DataCommandSelection gpio.PinOut 	// High: Data, Low: Command
 	ChipSelection gpio.PinOut 			// Low: active
 	rst gpio.PinOut 					// Low: active
-	busy gpio.PinIO 					// Low: active
+	Busy gpio.PinIO 					// Low: active
 	model Model 						// Details of the model of the display you are using
 	lineWidth int 						// Number of pixels divided by 8 (lines are grouped as a bit in a byte)
 	Display draw.Image 					// This is the image that will be printed to screen
@@ -181,19 +184,30 @@ const (
 	VCM_DC_SETTING                 byte = 0x82
 */
 
+func registerPin(name string, simulation bool) gpio.PinIO {
+	if simulation {
+		return &gpiotest.Pin{
+			N: name,
+			EdgesChan: make(chan gpio.Level),
+		}
+	}
+
+	return gpioreg.ByName(name)
+}
+
 // New creates a new instance of EPaper with default parameters.
 func New(model Model) (*EPaper, error) {
-	return NewCustom(DataCommandPin, ChipSelectionPin, ResetPin, BusyPin, model)
+	return NewCustom(DataCommandPin, ChipSelectionPin, ResetPin, BusyPin, model, false, nil)
 }
 
 // NewCustom creates a new instance of EPaper with custom parameters. If you have the HAT module, you can use the New() function.
-func NewCustom(dcPin, csPin, rstPin, busyPin string, model Model) (*EPaper, error) {
+func NewCustom(dcPin, csPin, rstPin, busyPin string, model Model, simulation bool, debug io.Writer) (*EPaper, error) {
 	if _, err := host.Init(); err != nil {
 		return nil, err
 	}
 
 	// DC Pin
-	dc := gpioreg.ByName(dcPin)
+	dc := registerPin(dcPin, simulation)
 	if dc == nil {
 		return nil, errors.New("spi: failed to find DC pin")
 	} else if dc == gpio.INVALID {
@@ -203,7 +217,7 @@ func NewCustom(dcPin, csPin, rstPin, busyPin string, model Model) (*EPaper, erro
 	}
 
 	// CS Pin
-	cs := gpioreg.ByName(csPin)
+	cs := registerPin(csPin, simulation)
 	if cs == nil {
 		return nil, errors.New("spi: failed to find CS pin")
 	} else if err := cs.Out(gpio.Low); err != nil {
@@ -211,7 +225,7 @@ func NewCustom(dcPin, csPin, rstPin, busyPin string, model Model) (*EPaper, erro
 	}
 
 	// RST Pin
-	rst := gpioreg.ByName(rstPin)
+	rst := registerPin(rstPin, simulation)
 	if rst == nil {
 		return nil, errors.New("spi: failed to find RST pin")
 	} else if err := rst.Out(gpio.Low); err != nil {
@@ -219,7 +233,7 @@ func NewCustom(dcPin, csPin, rstPin, busyPin string, model Model) (*EPaper, erro
 	}
 
 	// BUSY Pin
-	busy := gpioreg.ByName(busyPin)
+	busy := registerPin(busyPin, simulation)
 	if busy == nil {
 		return nil, errors.New("spi: failed to find BUSY pin")
 	} else if err := busy.In(gpio.PullDown, gpio.RisingEdge); err != nil {
@@ -227,9 +241,15 @@ func NewCustom(dcPin, csPin, rstPin, busyPin string, model Model) (*EPaper, erro
 	}
 
 	// SPI
-	port, err := spireg.Open("")
-	if err != nil {
-		return nil, err
+	var port spi.PortCloser
+	if simulation {
+		port = spitest.NewRecordRaw(debug)
+	} else {
+		var err error
+		port, err = spireg.Open("")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// TODO official python lib limits to 4 MHz
@@ -249,7 +269,7 @@ func NewCustom(dcPin, csPin, rstPin, busyPin string, model Model) (*EPaper, erro
 		DataCommandSelection: dc,
 		ChipSelection: cs,
 		rst: rst,
-		busy: busy,
+		Busy: busy,
 		model: model,
 		lineWidth: lineWidth,
 		Display: paint.FloodFill(
@@ -285,7 +305,7 @@ func (e *EPaper) sendData(d byte) {
 }
 
 func (e *EPaper) waitUntilIdle() {
-	for e.busy.Read() == gpio.Low {
+	for e.Busy.Read() == gpio.Low {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
@@ -348,7 +368,7 @@ func (e *EPaper) ClearScreen() {
 		image.Rect(0, 0, e.Display.Bounds().Dx(), e.Display.Bounds().Dy()),
 		image.Point{0, 0}, color.RGBA{255, 255, 255, 255}, 255)
 
-	data := bytes.Repeat([]byte{0xFF}, e.model.Height * e.model.Width * 4)
+	data := bytes.Repeat([]byte{0xFF}, e.model.Height * e.model.Width / 8)	// Each byte contains 8 pixels
 
 	e.send(CmdDataStartTransimission1, data)
 	e.send(0x13, data)
