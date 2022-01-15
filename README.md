@@ -13,6 +13,20 @@ This is a library to help you use Waveshare(tm)'s [e-paper](https://en.wikipedia
 
 This lib is still on its initial pre-release version. That means, it is still under development, no guarantees of retrocompatibility between commits. Still, pushed commits should be functional.
 
+# IMPORTANT NOTICE FOR RASPBERRY PI USERS
+
+If you want to use the e-paper with Raspberry Pi, you need to enable the SPI kernel modules.
+
+- Run the command `sudo raspi-config` (notice that you need root access).
+- Access menu `3 Interface Options`, then `P4 SPI` and finally, select `Yes`.
+- Reboot the Raspberry PI
+
+```
+If you don't follow these commands, you may see an error when running the lib similar to:
+
+spireg: no port found. Did you run Init()?
+```
+
 # The basics
 
 This is the minimum code to have something printed on the display. For more details, check the documentation and/or the demo codes at `examples/`.
