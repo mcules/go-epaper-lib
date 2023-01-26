@@ -1,4 +1,4 @@
-module github.com/otaviokr/go-epaper-lib
+module github.com/mcules/go-epaper-lib
 
 go 1.17
 

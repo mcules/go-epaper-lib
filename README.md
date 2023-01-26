@@ -40,7 +40,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/otaviokr/go-epaper-lib"
+	"github.com/mcules/go-epaper-lib"
 )
 
 func main() {

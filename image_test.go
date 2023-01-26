@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/anthonynsimon/bild/paint"
-	"github.com/otaviokr/go-epaper-lib"
+	"github.com/mcules/go-epaper-lib"
 	"periph.io/x/periph/conn/gpio"
 )
 
